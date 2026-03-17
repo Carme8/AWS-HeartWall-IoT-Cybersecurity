@@ -39,12 +39,12 @@ Il sistema HeartWall è testato contro tre principali vettori di attacco IoT, vi
 * **Segnale**: Battito cardiaco tra 60-100 BPM, voltaggio stabile.
 * **Risposta IA**: Score di anomalia basso (< 0.1). Il traffico è permesso.
 
-### 2. 🟡 CMD Injection (Attacco al Protocollo)
+### 2. ⚡ CMD Injection (Attacco al Protocollo)
 * **Descrizione**: Un hacker tenta di iniettare comandi non autorizzati nel payload JSON per modificare le impostazioni del dispositivo.
 * **Segnale**: Presenza di flag `command_override` o stringhe di sistema inaspettate nel pacchetto dati.
 * **Risposta IA**: Identificazione di pattern sintattici sospetti. Segnalazione su dashboard e blocco del pacchetto.
 
-### 3. 🔴 Bio-Tampering (Manipolazione Biometrica)
+### 3. 🔘 Bio-Tampering (Manipolazione Biometrica)
 * **Descrizione**: L'attaccante altera i dati medici inviati per indurre il sistema di monitoraggio a prendere decisioni errate (es. somministrazione di shock non necessari).
 * **Segnale**: Frequenza cardiaca alterata artificialmente (es. 250 BPM istantanei) o cali di voltaggio improvvisi.
 * **Risposta IA**: Rilevamento di deviazione comportamentale estrema. Trigger immediato dell'allarme SNS.
