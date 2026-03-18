@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS HeartWall — Flask Bridge Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-deep:#04080f; --bg-panel:#070d18; --bg-card:#0a1628; --bg-card2:#0d1f36;
+  --border:#1a3a5c; --border-bright:#1e6fa8;
+  --aws-orange:#FF9900; --aws-teal:#00A1C9;
+  --aws-green-bright:#59b536; --aws-purple:#8C4FFF; --aws-pink:#E7157B;
+  --heart-red:#FF2D55; --heart-pink:#FF6B9D;
+  --cmd-yellow:#FFD700; --bio-cyan:#00FFFF; --zero-day:#FF4500;
+  --text-primary:#e8f4ff; --text-secondary:#7fb3d3; --text-dim:#3d6a8a;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  background:var(--bg-deep);font-family:'Rajdhani',sans-serif;
+  color:var(--text-primary);min-height:100vh;overflow-x:hidden;
+  background-image:
+    radial-gradient(ellipse at 20% 10%,rgba(255,45,85,.06) 0%,transparent 50%),
+    radial-gradient(ellipse at 80% 90%,rgba(0,161,201,.05) 0%,transparent 50%),
+    repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(26,58,92,.12) 40px),
+    repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(26,58,92,.12) 40px);
+}
+
+/* ── HEADER ── */
+.header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 24px;
+  background:linear-gradient(90deg,#04080f 0%,#080d14 50%,#04080f 100%);
+  border-bottom:1px solid var(--border);position:relative;
+}
+.header::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--heart-red),var(--aws-teal),var(--zero-day),transparent);
+  opacity:.8;
+}
+.aws-badge{background:var(--aws-orange);color:#000;font-family:'Orbitron',monospace;font-weight:900;font-size:11px;padding:3px 8px;letter-spacing:1px;}
+.header-title{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;letter-spacing:2px;}
+.header-title .red{color:var(--heart-red);} .header-title .teal{color:var(--aws-teal);} .header-title .zd{color:var(--zero-day);}
+.status-pill{display:flex;align-items:center;gap:6px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-secondary);}
+.status-dot{width:7px;height:7px;border-radius:50%;animation:pulse 2s ease-in-out infinite;}
+.dot-green{background:var(--aws-green-bright);box-shadow:0 0 6px var(--aws-green-bright);}
+.dot-red{background:var(--heart-red);box-shadow:0 0 6px var(--heart-red);animation-delay:.5s;}
+.dot-yellow{background:var(--cmd-yellow);box-shadow:0 0 6px var(--cmd-yellow);animation-delay:1s;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+.heart-bpm{font-family:'Orbitron',monospace;font-size:15px;font-weight:900;color:var(--heart-red);text-shadow:0 0 12px var(--heart-red);animation:heartbeat .86s ease-in-out infinite;}
+@keyframes heartbeat{0%,100%{transform:scale(1);}12%{transform:scale(1.15);}24%{transform:scale(1);}36%{transform:scale(1.08);}}
+.header-time{font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--heart-red);border:1px solid var(--border);padding:4px 10px;}
+
+/* ── BRIDGE STATUS BAR ── */
+.bridge-bar{
+  display:flex;align-items:center;gap:12px;padding:8px 20px;
+  background:rgba(4,8,15,.95);border-bottom:1px solid var(--border);
+  font-family:'Share Tech Mono',monospace;font-size:10px;
+}
+.bridge-dot{width:8px;height:8px;border-radius:50%;}
+.bridge-online{background:var(--aws-green-bright);box-shadow:0 0 8px var(--aws-green-bright);animation:pulse 1.5s infinite;}
+.bridge-offline{background:#555;box-shadow:none;}
+.bridge-connecting{background:var(--aws-orange);box-shadow:0 0 8px var(--aws-orange);animation:pulse .8s infinite;}
+#bridgeStatusText{transition:color .3s;}
+.bridge-sep{color:var(--text-dim);}
+
+/* ── ATTACK BAR ── */
+.attack-bar{
+  display:flex;align-items:center;gap:8px;padding:9px 20px;
+  background:linear-gradient(90deg,rgba(255,69,0,.07),rgba(255,45,85,.04),rgba(255,69,0,.07));
+  border-bottom:1px solid rgba(255,69,0,.25);position:relative;overflow:hidden;
+}
+.attack-bar::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--zero-day),transparent);animation:scanLine 3s linear infinite;}
+@keyframes scanLine{to{left:200%;}}
+.attack-label{font-family:'Orbitron',monospace;font-size:9px;color:var(--zero-day);letter-spacing:2px;white-space:nowrap;}
+.atk-btn{font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;padding:5px 13px;border:1px solid;cursor:pointer;background:transparent;transition:all .2s;letter-spacing:1px;}
+.atk-btn:hover{transform:scale(1.04);}
+.atk-btn:disabled{opacity:.35;cursor:not-allowed;transform:none;}
+.btn-cmd{border-color:var(--cmd-yellow);color:var(--cmd-yellow);}
+.btn-cmd:hover:not(:disabled){background:rgba(255,215,0,.12);box-shadow:0 0 14px rgba(255,215,0,.35);}
+.btn-bio{border-color:var(--bio-cyan);color:var(--bio-cyan);}
+.btn-bio:hover:not(:disabled){background:rgba(0,255,255,.08);box-shadow:0 0 14px rgba(0,255,255,.35);}
+.btn-reset{border-color:var(--aws-green-bright);color:var(--aws-green-bright);}
+.btn-reset:hover:not(:disabled){background:rgba(89,181,54,.12);box-shadow:0 0 14px rgba(89,181,54,.35);}
+.btn-combo{border-color:var(--zero-day);color:var(--zero-day);}
+.btn-combo:hover:not(:disabled){background:rgba(255,69,0,.12);box-shadow:0 0 14px rgba(255,69,0,.4);}
+.server-info{margin-left:auto;display:flex;gap:16px;align-items:center;font-family:'Share Tech Mono',monospace;font-size:9px;}
+
+/* ── LAYOUT ── */
+.dashboard{display:grid;grid-template-columns:295px 1fr 275px;grid-template-rows:auto auto;padding:12px;gap:10px;min-height:calc(100vh - 110px);}
+.panel{background:var(--bg-panel);border:1px solid var(--border);padding:14px;position:relative;overflow:hidden;transition:border-color .4s,box-shadow .4s;}
+.panel::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.panel-red::before{background:linear-gradient(90deg,transparent,var(--heart-red),transparent);}
+.panel-teal::before{background:linear-gradient(90deg,transparent,var(--aws-teal),transparent);}
+.panel-purple::before{background:linear-gradient(90deg,transparent,var(--aws-purple),transparent);}
+.panel-orange::before{background:linear-gradient(90deg,transparent,var(--aws-orange),transparent);}
+.panel-left{grid-column:1;grid-row:1/3;}
+.panel-center{grid-column:2;grid-row:1;}
+.panel-bottom{grid-column:2;grid-row:2;}
+.panel-right{grid-column:3;grid-row:1/3;}
+
+.panel-cmd-active{border-color:var(--cmd-yellow)!important;box-shadow:0 0 28px rgba(255,215,0,.3)!important;}
+.panel-bio-active{border-color:var(--bio-cyan)!important;box-shadow:0 0 28px rgba(0,255,255,.25)!important;}
+.panel-combo-active{border-color:var(--zero-day)!important;box-shadow:0 0 32px rgba(255,69,0,.4)!important;}
+
+.panel-title{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+
+/* ── ECG ── */
+.ecg-container{background:rgba(10,22,40,.9);border:1px solid var(--border);position:relative;overflow:hidden;margin-bottom:8px;transition:border-color .4s;}
+.ecg-label{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-dim);display:flex;justify-content:space-between;margin-bottom:3px;}
+canvas{display:block;}
+
+/* ── VITALS ── */
+.vital-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px;}
+.vital-box{background:var(--bg-card);border:1px solid var(--border);padding:7px;text-align:center;transition:all .4s;}
+.vital-val{font-family:'Orbitron',monospace;font-size:17px;font-weight:700;line-height:1;transition:color .4s;}
+.vital-lbl{font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
+
+/* ── STATUS BOX ── */
+#attackStatus{padding:8px 12px;border:1px solid;margin-bottom:8px;font-family:'Share Tech Mono',monospace;font-size:10px;text-align:center;transition:all .4s;}
+#attackStatus.safe{border-color:var(--aws-green-bright);color:var(--aws-green-bright);background:rgba(89,181,54,.08);}
+#attackStatus.cmd{border-color:var(--cmd-yellow);color:var(--cmd-yellow);background:rgba(255,215,0,.08);animation:flashAlert .7s infinite;}
+#attackStatus.bio{border-color:var(--bio-cyan);color:var(--bio-cyan);background:rgba(0,255,255,.06);animation:flashAlert .9s infinite;}
+#attackStatus.combo{border-color:var(--zero-day);color:var(--zero-day);background:rgba(255,69,0,.1);animation:flashAlert .5s infinite;}
+@keyframes flashAlert{0%,100%{opacity:1;}50%{opacity:.5;}}
+
+/* ── LOG ── */
+.log-wrap{background:var(--bg-card);border:1px solid var(--border);padding:7px;height:100px;overflow-y:auto;}
+.log-entry{font-family:'Share Tech Mono',monospace;font-size:9px;padding:2px 0;border-bottom:1px solid rgba(26,58,92,.3);display:flex;gap:7px;}
+.log-time{color:var(--text-dim);}
+.log-safe{color:var(--aws-green-bright);} .log-cmd{color:var(--cmd-yellow);} .log-bio{color:var(--bio-cyan);} .log-combo{color:var(--zero-day);}
+
+/* ── ALERTS ── */
+.alert-item{display:flex;align-items:flex-start;gap:7px;padding:5px 7px;background:var(--bg-card);border:1px solid var(--border);margin-bottom:4px;}
+.alert-sev{font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;padding:1px 4px;min-width:28px;text-align:center;}
+.sev-low{background:rgba(63,134,36,.3);color:var(--aws-green-bright);border:1px solid var(--aws-green-bright);}
+.sev-med{background:rgba(255,153,0,.2);color:var(--aws-orange);border:1px solid var(--aws-orange);}
+.sev-high{background:rgba(255,69,0,.25);color:var(--zero-day);border:1px solid var(--zero-day);}
+.sev-crit{background:rgba(255,0,0,.3);color:#ff4444;border:1px solid #ff4444;animation:flashAlert .5s infinite;}
+.alert-text{font-size:11px;color:var(--text-secondary);line-height:1.3;}
+.alert-time{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-dim);margin-top:1px;}
+
+/* ── METRICS ── */
+.metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px;}
+.metric-box{background:var(--bg-card);border:1px solid var(--border);padding:7px 8px;display:flex;flex-direction:column;gap:2px;transition:all .4s;}
+.metric-val{font-family:'Orbitron',monospace;font-size:19px;font-weight:700;line-height:1;transition:color .4s;}
+.metric-lbl{font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.8px;}
+.metric-sub{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-dim);}
+
+/* ── FLOW NODES ── */
+.flow-node{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:65px;}
+.flow-icon-wrap{width:50px;height:50px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:22px;transition:all .4s;}
+.node-pacemaker .flow-icon-wrap{background:rgba(255,45,85,.1);border:1px solid var(--heart-red);box-shadow:0 0 14px rgba(255,45,85,.3);}
+.node-iot .flow-icon-wrap{background:rgba(26,156,62,.1);border:1px solid #1A9C3E;box-shadow:0 0 10px rgba(26,156,62,.25);}
+.node-vpc .flow-icon-wrap{background:rgba(140,79,255,.1);border:1px solid var(--aws-purple);box-shadow:0 0 10px rgba(140,79,255,.25);}
+.node-lambda .flow-icon-wrap{background:rgba(232,119,34,.1);border:1px solid var(--aws-orange);font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:900;}
+.node-sagemaker .flow-icon-wrap{background:rgba(1,168,141,.1);border:1px solid #01A88D;box-shadow:0 0 10px rgba(1,168,141,.25);}
+.node-s3 .flow-icon-wrap{background:rgba(63,134,36,.1);border:1px solid var(--aws-green-bright);}
+.flow-label{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-secondary);text-align:center;line-height:1.3;}
+.flow-sublabel{font-size:8px;color:var(--text-dim);text-align:center;font-family:'Share Tech Mono',monospace;transition:color .4s;}
+.flow-arrow{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:24px;gap:3px;}
+.arrow-line{width:100%;height:2px;background:linear-gradient(90deg,var(--border-bright),var(--aws-teal));position:relative;overflow:hidden;transition:background .4s;}
+.arrow-line::after{content:'';position:absolute;top:-1px;left:-20px;width:20px;height:4px;background:rgba(255,255,255,.85);animation:flowPacket 1.8s linear infinite;box-shadow:0 0 8px var(--aws-teal);}
+.arrow-line.red-flow{background:linear-gradient(90deg,var(--heart-red),var(--heart-pink));}
+.arrow-line.red-flow::after{background:rgba(255,45,85,.9);animation-duration:1.8s;}
+.arrow-line.attack-flow{background:linear-gradient(90deg,var(--zero-day),var(--cmd-yellow))!important;}
+.arrow-line.attack-flow::after{background:rgba(255,69,0,.9)!important;animation-duration:.5s!important;}
+.arrow-line.bio-flow{background:linear-gradient(90deg,var(--bio-cyan),rgba(0,255,255,.4))!important;}
+.arrow-line.bio-flow::after{background:rgba(0,255,255,.9)!important;animation-duration:.9s!important;}
+@keyframes flowPacket{0%{left:-20px;opacity:0;}10%{opacity:1;}90%{opacity:1;}100%{left:calc(100% + 20px);opacity:0;}}
+.arrow-proto{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--aws-teal);transition:color .4s;}
+
+/* ── ML BOTTOM ── */
+.ml-wrap{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.ml-wave{background:var(--bg-card);border:1px solid var(--border);padding:10px;position:relative;overflow:hidden;transition:border-color .4s;}
+.ml-title{font-family:'Share Tech Mono',monospace;font-size:9px;margin-bottom:6px;display:flex;justify-content:space-between;}
+.vita-info{background:var(--bg-card2);border:1px solid var(--border);padding:10px;overflow-y:auto;max-height:200px;}
+.vita-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid rgba(26,58,92,.5);font-family:'Share Tech Mono',monospace;font-size:10px;}
+.vita-row:last-child{border-bottom:none;}
+.vita-key{color:var(--text-dim);}
+.vita-val{color:var(--text-primary);transition:color .4s;}
+.vita-val.active{color:var(--aws-green-bright);}  .vita-val.orange{color:var(--aws-orange);}
+.vita-val.cmd{color:var(--cmd-yellow);}  .vita-val.bio{color:var(--bio-cyan);}  .vita-val.zd{color:var(--zero-day);}  .vita-val.red{color:var(--heart-red);}
+
+/* ── RIGHT ── */
+.zt-item{display:flex;align-items:center;gap:8px;padding:6px 7px;background:var(--bg-card);border:1px solid var(--border);margin-bottom:4px;transition:all .4s;}
+.zt-icon-box{width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;border-radius:3px;flex-shrink:0;}
+.zt-info{flex:1;}
+.zt-name{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:12px;line-height:1.2;}
+.zt-desc{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-dim);margin-top:1px;transition:color .4s;}
+.zt-status{font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;padding:2px 4px;transition:all .4s;}
+.s-active{color:var(--aws-green-bright);background:rgba(89,181,54,.1);border:1px solid rgba(89,181,54,.3);}
+.s-enforced{color:var(--aws-orange);background:rgba(255,153,0,.1);border:1px solid rgba(255,153,0,.3);}
+.s-alert{color:var(--zero-day);background:rgba(255,69,0,.15);border:1px solid rgba(255,69,0,.4);animation:flashAlert .6s infinite;}
+.s-breach{color:#ff2222;background:rgba(255,0,0,.2);border:1px solid #ff2222;animation:flashAlert .4s infinite;}
+
+/* ── COMPLIANCE ── */
+.cbar-row{display:flex;align-items:center;gap:7px;margin-bottom:4px;}
+.cbar-lbl{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-dim);width:36px;}
+.cbar-track{flex:1;height:6px;background:var(--bg-card);border:1px solid var(--border);}
+.cbar-fill{height:100%;background:linear-gradient(90deg,var(--aws-teal),var(--aws-green-bright));transition:width .8s,background .5s;}
+.cbar-pct{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--aws-green-bright);width:28px;text-align:right;transition:color .4s;}
+
+/* ── ZD PANEL ── */
+.zd-panel{background:rgba(255,69,0,.04);border:1px solid rgba(255,69,0,.25);padding:10px;margin-bottom:10px;position:relative;overflow:hidden;}
+.zd-panel::before{content:'';position:absolute;top:0;left:-200%;width:100%;height:100%;background:linear-gradient(105deg,transparent 40%,rgba(255,69,0,.05) 50%,transparent 60%);animation:shimmer 4s linear infinite;}
+@keyframes shimmer{to{left:200%;}}
+.zd-title{font-family:'Orbitron',monospace;font-size:9px;color:var(--zero-day);letter-spacing:2px;margin-bottom:8px;}
+.threat-row{display:flex;justify-content:space-between;align-items:center;font-family:'Share Tech Mono',monospace;font-size:9px;padding:3px 0;border-bottom:1px solid rgba(255,69,0,.12);}
+.threat-key{color:rgba(255,120,50,.7);}
+.threat-val{color:var(--zero-day);transition:color .4s;}
+
+/* ── BRIDGE OFFLINE OVERLAY ── */
+#offlineOverlay{
+  display:none;position:fixed;inset:0;background:rgba(4,8,15,.85);
+  z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:16px;
+}
+.offline-box{
+  background:var(--bg-panel);border:1px solid rgba(255,69,0,.5);
+  padding:32px 48px;text-align:center;
+  box-shadow:0 0 40px rgba(255,69,0,.2);
+}
+.offline-title{font-family:'Orbitron',monospace;font-size:18px;color:var(--zero-day);letter-spacing:3px;margin-bottom:12px;}
+.offline-sub{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-secondary);line-height:2;}
+.offline-cmd{font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--aws-green-bright);background:var(--bg-card);border:1px solid var(--aws-green-bright);padding:10px 20px;margin-top:16px;letter-spacing:1px;}
+
+/* ── BIO OVERLAY ── */
+#bioOverlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:500;}
+#bioCanvas{width:100%;height:100%;}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:var(--bg-card);} ::-webkit-scrollbar-thumb{background:var(--border-bright);}
+</style>
+</head>
+<body>
+
+<!-- ── BRIDGE OFFLINE OVERLAY ── -->
+<div id="offlineOverlay" style="display:none;position:fixed;inset:0;background:rgba(4,8,15,.88);z-index:999;align-items:center;justify-content:center;flex-direction:column;">
+  <div class="offline-box">
+    <div class="offline-title">&#9889; SERVER OFFLINE</div>
+    <div class="offline-sub">
+      Il bridge Flask non è raggiungibile su<br>
+      <span style="color:var(--aws-teal);">http://localhost:5000</span><br><br>
+      Avvia il server con il comando:
+    </div>
+    <div class="offline-cmd">python heartwall_server.py</div>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);margin-top:14px;">
+      Nuovo tentativo tra <span id="retryCountdown" style="color:var(--aws-orange);">5</span>s...
+    </div>
+  </div>
+</div>
+
+<!-- ── BIO NOISE OVERLAY ── -->
+<div id="bioOverlay"><canvas id="bioCanvas"></canvas></div>
+
+<!-- ── HEADER ── -->
+<div class="header">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="aws-badge">aws</div>
+    <div class="header-title"><span class="red">HEART</span><span class="teal">WALL</span> <span style="color:var(--text-dim);">|</span> <span class="zd">FLASK BRIDGE</span> v1.0</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div class="status-pill"><div class="status-dot dot-green"></div>PACEMAKER</div>
+    <div class="status-pill"><div class="status-dot dot-red" id="serverDot"></div><span id="serverPill">SERVER</span></div>
+    <div class="status-pill"><div class="status-dot dot-yellow"></div>ZERO-DAY WATCH</div>
+    <div class="heart-bpm">&#9829; <span id="bpmVal">--</span> BPM</div>
+    <div class="header-time" id="clock">--:--:-- CET</div>
+  </div>
+</div>
+
+<!-- ── BRIDGE STATUS BAR ── -->
+<div class="bridge-bar">
+  <div class="bridge-dot bridge-connecting" id="bridgeDot"></div>
+  <span id="bridgeStatusText" style="color:var(--aws-orange);">Connessione a http://localhost:5000...</span>
+  <span class="bridge-sep">|</span>
+  <span style="color:var(--text-dim);">PING:</span> <span id="pingMs" style="color:var(--aws-green-bright);">---</span>
+  <span class="bridge-sep">|</span>
+  <span style="color:var(--text-dim);">TICK:</span> <span id="tickVal" style="color:var(--aws-teal);">---</span>
+  <span class="bridge-sep">|</span>
+  <span style="color:var(--text-dim);">LAST UPDATE:</span> <span id="lastUpdate" style="color:var(--text-secondary);">---</span>
+  <span class="bridge-sep">|</span>
+  <span style="color:var(--text-dim);">POLL:</span> <span style="color:var(--aws-green-bright);">2s</span>
+  <span class="bridge-sep">|</span>
+  <span style="color:var(--text-dim);">ENDPOINT:</span>
+  <span style="color:var(--aws-teal);">localhost:5000/stats</span>
+</div>
+
+<!-- ── ATTACK CONTROL BAR ── -->
+<div class="attack-bar">
+  <div class="attack-label">&#9889; ZERO-DAY SIMULATOR</div>
+  <button class="atk-btn btn-cmd"   id="btnCmd"   onclick="sendAttack('cmd')"  >&#128196; CMD INJECTION</button>
+  <button class="atk-btn btn-bio"   id="btnBio"   onclick="sendAttack('bio')"  >&#128308; BIOSIGNAL TAMPER</button>
+  <button class="atk-btn btn-combo" id="btnCombo" onclick="sendAttack('combo')">&#9762; COMBO ATTACK</button>
+  <button class="atk-btn btn-reset" id="btnReset" onclick="sendAttack('none')" >&#10003; RESET SISTEMA</button>
+  <div class="server-info">
+    <span style="color:var(--text-dim);">MODE:</span><span id="modeLabel" style="color:var(--aws-green-bright);">NONE</span>
+    <span style="color:var(--text-dim);">SCORE:</span><span id="liveScore" style="color:var(--heart-red);">0.000</span>
+    <span style="color:var(--text-dim);">THREAT:</span><span id="threatLabel" style="color:var(--aws-green-bright);">NORMAL</span>
+  </div>
+</div>
+
+<!-- ── GRID ── -->
+<div class="dashboard">
+
+  <!-- LEFT: TELEMETRIA -->
+  <div class="panel panel-red panel-left" id="leftPanel">
+    <div class="panel-title" style="color:var(--heart-red);">&#9829; PACEMAKER TELEMETRY</div>
+
+    <div id="attackStatus" class="safe"><span id="attackStatusText">&#9679; In attesa del bridge Flask...</span></div>
+
+    <div class="ecg-label"><span>ECG REAL-TIME &middot; LEAD II</span><span style="color:var(--heart-red);" id="ecgLiveLabel">&#9679; LIVE</span></div>
+    <div class="ecg-container"><canvas id="ecgCanvas" width="267" height="70"></canvas></div>
+
+    <div class="ecg-label" style="margin-top:5px;"><span>ANOMALY SCORE STREAM</span><span id="lstmLabel" style="color:var(--aws-teal);">SERVER DATA</span></div>
+    <div class="ecg-container"><canvas id="anomalyCanvas" width="267" height="55"></canvas></div>
+
+    <div class="vital-grid">
+      <div class="vital-box"><div class="vital-val" style="color:var(--heart-red);"  id="hrVal">--</div><div class="vital-lbl">Heart Rate</div></div>
+      <div class="vital-box"><div class="vital-val" style="color:var(--aws-teal);"   id="rrVal">--</div><div class="vital-lbl">RR Interval ms</div></div>
+      <div class="vital-box"><div class="vital-val" style="color:var(--aws-green-bright);" id="qrsVal">--</div><div class="vital-lbl">QRS ms</div></div>
+      <div class="vital-box"><div class="vital-val" style="color:var(--aws-orange);" id="qtVal">--</div><div class="vital-lbl">QT Interval ms</div></div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <div class="panel-title" style="font-size:9px;color:var(--text-dim);margin-bottom:5px;">&#9888; ALERT QUEUE</div>
+      <div id="alertQueue"><div class="alert-item"><div class="alert-sev sev-low">SYS</div><div><div class="alert-text">Attesa connessione bridge Flask...</div><div class="alert-time">localhost:5000</div></div></div></div>
+    </div>
+
+    <div style="margin-top:8px;">
+      <div class="panel-title" style="font-size:9px;color:var(--text-dim);margin-bottom:4px;">&#9654; LIVE LOG</div>
+      <div class="log-wrap" id="attackLog">
+        <div class="log-entry log-safe"><span class="log-time">--:--:--</span><span>Sistema avviato</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER TOP: ARCHITETTURA -->
+  <div class="panel panel-teal panel-center" id="centerPanel">
+    <div class="panel-title" style="color:var(--aws-teal);">&#9729; HEARTWALL ARCHITECTURE &middot; EU-CENTRAL-1 &middot; LIVE FROM FLASK</div>
+
+    <div style="display:flex;align-items:center;gap:4px;padding:8px 4px;overflow-x:auto;flex-wrap:nowrap;">
+      <div class="flow-node node-pacemaker">
+        <div class="flow-icon-wrap">&#128147;</div>
+        <div class="flow-label">IoT Device<br>Pacemaker</div>
+        <div class="flow-sublabel" id="fn-pac-sub">TLS 1.2</div>
+      </div>
+      <div class="flow-arrow"><div class="arrow-line red-flow" id="al0"></div><div class="arrow-proto red" id="ap0">MQTT</div></div>
+      <div class="flow-node node-iot">
+        <div class="flow-icon-wrap">&#128225;</div>
+        <div class="flow-label">AWS IoT<br>Core</div>
+        <div class="flow-sublabel" id="fn-iot-sub">Ingress OK</div>
+      </div>
+      <div class="flow-arrow"><div class="arrow-line" id="al1"></div><div class="arrow-proto" id="ap1">Rule</div></div>
+      <div class="flow-node node-vpc">
+        <div class="flow-icon-wrap">&#128256;</div>
+        <div class="flow-label">VPC + NAT<br>Gateway</div>
+        <div class="flow-sublabel" id="fn-vpc-sub">AZ-A Public</div>
+      </div>
+      <div class="flow-arrow"><div class="arrow-line" id="al2"></div><div class="arrow-proto" id="ap2">Route</div></div>
+      <div class="flow-node node-lambda">
+        <div class="flow-icon-wrap">&#955;</div>
+        <div class="flow-label">Lambda<br>Guard</div>
+        <div class="flow-sublabel" id="fn-lam-sub">ML Trigger</div>
+      </div>
+      <div class="flow-arrow"><div class="arrow-line" id="al3"></div><div class="arrow-proto" id="ap3">Invoke</div></div>
+      <div class="flow-node node-sagemaker">
+        <div class="flow-icon-wrap">&#129504;</div>
+        <div class="flow-label">SageMaker<br>LSTM</div>
+        <div class="flow-sublabel" id="fn-sage-sub">Active Model</div>
+      </div>
+      <div class="flow-arrow"><div class="arrow-line" style="background:linear-gradient(90deg,var(--aws-green-bright),var(--aws-teal));" id="al4"></div><div class="arrow-proto" style="color:var(--aws-green-bright);" id="ap4">Score</div></div>
+      <div class="flow-node node-s3">
+        <div class="flow-icon-wrap">&#129695;</div>
+        <div class="flow-label">S3 Threat<br>Repository</div>
+        <div class="flow-sublabel" id="fn-s3-sub">KMS Encrypted</div>
+      </div>
+    </div>
+
+    <!-- MONITORING ROW -->
+    <div style="display:flex;align-items:center;gap:7px;padding:8px 4px;border-top:1px solid var(--border);flex-wrap:wrap;">
+      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text-dim);min-width:65px;">MONITORING</div>
+      <div style="display:flex;align-items:center;gap:4px;background:var(--bg-card);border:1px solid var(--border);padding:4px 7px;" id="defenderBox">
+        <span style="font-size:14px;">&#128737;</span>
+        <div><div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:#1A9C3E;" id="defenderLabel">IoT Defender</div><div style="font-size:8px;color:var(--text-dim);" id="defenderSub">Behavioral audit</div></div>
+        <span style="margin-left:5px;padding:2px 4px;font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;" class="s-active" id="defenderStatus">WATCH</span>
+      </div>
+      <span style="color:var(--text-dim);">&rarr;</span>
+      <div style="display:flex;align-items:center;gap:4px;background:var(--bg-card);border:1px solid var(--border);padding:4px 7px;">
+        <span style="font-size:14px;">&#128202;</span>
+        <div><div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--aws-pink);">CloudWatch</div><div style="font-size:8px;color:var(--text-dim);">Alarms + Metrics</div></div>
+        <span class="s-active" style="margin-left:5px;padding:2px 4px;font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;" id="cwStatus">LIVE</span>
+      </div>
+      <span style="color:var(--text-dim);">&rarr;</span>
+      <div style="display:flex;align-items:center;gap:4px;background:var(--bg-card);border:1px solid var(--border);padding:4px 7px;">
+        <span style="font-size:14px;">&#128226;</span>
+        <div><div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--aws-pink);">Amazon SNS</div><div style="font-size:8px;color:var(--text-dim);" id="snsSub">Clinician SMS</div></div>
+        <span class="s-enforced" style="margin-left:5px;padding:2px 4px;font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;" id="snsStatus">ARMED</span>
+      </div>
+      <span style="color:var(--text-dim);">&rarr;</span>
+      <div style="background:rgba(255,45,85,.08);border:1px solid rgba(255,45,85,.3);padding:4px 8px;font-family:'Share Tech Mono',monospace;font-size:9px;" id="clinicianBox">
+        <span style="color:var(--heart-red);">&#127973; CLINICIAN</span><br>
+        <span style="color:var(--text-dim);" id="clinicianSub">Standby</span>
+      </div>
+    </div>
+
+    <div class="metrics-row">
+      <div class="metric-box"><div class="metric-val" style="color:var(--heart-red);" id="mqttVal">--</div><div class="metric-lbl">MQTT pkt/min</div><div class="metric-sub" id="mqttSub">&#8593; Telemetria</div></div>
+      <div class="metric-box"><div class="metric-val" style="color:var(--aws-teal);">2</div><div class="metric-lbl">AZ Attive</div><div class="metric-sub">AZ-A &middot; AZ-B</div></div>
+      <div class="metric-box"><div class="metric-val" style="color:var(--aws-green-bright);" id="inferVal">--</div><div class="metric-lbl">Inference ms</div><div class="metric-sub">SageMaker</div></div>
+      <div class="metric-box"><div class="metric-val" style="color:var(--aws-purple);" id="scoreDisplayVal">0.000</div><div class="metric-lbl">Anomaly Score</div><div class="metric-sub">&#9650; Threshold 0.75</div></div>
+    </div>
+  </div>
+
+  <!-- CENTER BOTTOM: ML / SERVER DATA -->
+  <div class="panel panel-purple panel-bottom" id="bottomPanel">
+    <div class="panel-title" style="color:var(--aws-purple);">&#129504; SERVER DATA — FLASK BRIDGE &middot; REAL-TIME SCORES &middot; ZERO-DAY CLASSIFICATION</div>
+    <div class="ml-wrap">
+      <div>
+        <div class="ml-wave">
+          <div class="ml-title" style="color:var(--heart-red);"><span>ANOMALY SCORE STREAM</span><span id="scoreStatus" style="color:var(--aws-green-bright);">&#9679; LIVE</span></div>
+          <div style="height:58px;"><canvas id="scoreCanvas" width="240" height="58"></canvas></div>
+        </div>
+        <div class="ml-wave" style="margin-top:6px;">
+          <div class="ml-title" style="color:var(--aws-purple);"><span>CMD vs BIO SCORES</span><span id="confLabel" style="color:var(--aws-purple);">DUAL TRACK</span></div>
+          <div style="height:58px;"><canvas id="confCanvas" width="240" height="58"></canvas></div>
+        </div>
+      </div>
+      <div class="vita-info">
+        <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--aws-purple);margin-bottom:8px;">FLASK SERVER STATUS</div>
+        <div class="vita-row"><span class="vita-key">ENDPOINT</span><span class="vita-val orange">localhost:5000/stats</span></div>
+        <div class="vita-row"><span class="vita-key">POLL INTERVAL</span><span class="vita-val">2000ms</span></div>
+        <div class="vita-row"><span class="vita-key">PROTOCOL</span><span class="vita-val">HTTP/JSON</span></div>
+        <div class="vita-row"><span class="vita-key">CORS</span><span class="vita-val active">ENABLED</span></div>
+        <div class="vita-row"><span class="vita-key">SERVER STATUS</span><span class="vita-val" id="serverStatusVal">Connecting...</span></div>
+        <div class="vita-row"><span class="vita-key">THREAT TYPE</span><span class="vita-val" id="threatTypeVal">---</span></div>
+        <div class="vita-row"><span class="vita-key">CMD SCORE</span><span class="vita-val cmd" id="cmdScoreVal">0.000</span></div>
+        <div class="vita-row"><span class="vita-key">BIO SCORE</span><span class="vita-val bio" id="bioScoreVal">0.000</span></div>
+        <div class="vita-row"><span class="vita-key">NORMAL SCORE</span><span class="vita-val active" id="normScoreVal">0.000</span></div>
+        <div class="vita-row"><span class="vita-key">SERVER TICK</span><span class="vita-val" id="serverTickVal">---</span></div>
+        <div class="vita-row"><span class="vita-key">LATENCY</span><span class="vita-val active" id="latencyVal">---</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: SECURITY -->
+  <div class="panel panel-orange panel-right" id="rightPanel">
+    <div class="panel-title" style="color:var(--aws-orange);">&#128274; SECURITY &amp; ZERO-DAY STATUS</div>
+
+    <div class="zd-panel">
+      <div class="zd-title">&#9762; ZERO-DAY THREAT INTELLIGENCE</div>
+      <div class="threat-row"><span class="threat-key">ATTACK TYPE</span><span class="threat-val" id="zdType">MONITORING</span></div>
+      <div class="threat-row"><span class="threat-key">VECTOR</span><span class="threat-val" id="zdVector">---</span></div>
+      <div class="threat-row"><span class="threat-key">PAYLOAD</span><span class="threat-val" id="zdPayload">---</span></div>
+      <div class="threat-row"><span class="threat-key">SEVERITY</span><span class="threat-val" id="zdSeverity" style="color:var(--aws-green-bright);">NONE</span></div>
+      <div class="threat-row"><span class="threat-key">MITRE ATT&amp;CK</span><span class="threat-val" id="zdMitre">---</span></div>
+      <div class="threat-row"><span class="threat-key">RESPONSE</span><span class="threat-val active" id="zdResponse">STANDBY</span></div>
+    </div>
+
+    <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text-dim);text-transform:uppercase;margin-bottom:7px;padding-bottom:4px;border-bottom:1px solid var(--border);">&#8856; ZERO TRUST POSTURE</div>
+    <div class="zt-item"><div class="zt-icon-box" style="background:rgba(221,52,76,.15);border:1px solid rgba(221,52,76,.4);">&#128273;</div><div class="zt-info"><div class="zt-name">AWS KMS</div><div class="zt-desc">CMK &middot; AES-256 &middot; Rotazione 90gg</div></div><div class="zt-status s-active" id="kms-status">ACTIVE</div></div>
+    <div class="zt-item"><div class="zt-icon-box" style="background:rgba(140,79,255,.15);border:1px solid rgba(140,79,255,.4);">&#9729;</div><div class="zt-info"><div class="zt-name">VPC Isolation</div><div class="zt-desc" id="vpc-desc">Private subnet AZ-B &middot; No IGW</div></div><div class="zt-status s-active" id="vpc-status">ISOLATED</div></div>
+    <div class="zt-item"><div class="zt-icon-box" style="background:rgba(26,156,62,.15);border:1px solid rgba(26,156,62,.4);">&#128737;</div><div class="zt-info"><div class="zt-name">IoT Defender</div><div class="zt-desc" id="iot-desc">Behavioral audit &middot; Cert auth</div></div><div class="zt-status s-active" id="iot-status">GUARD</div></div>
+    <div class="zt-item"><div class="zt-icon-box" style="background:rgba(232,119,34,.15);border:1px solid rgba(232,119,34,.4);">&#955;</div><div class="zt-info"><div class="zt-name">Lambda Guard</div><div class="zt-desc" id="lam-desc">Anomaly trigger &middot; ML interface</div></div><div class="zt-status s-active" id="lam-status">ARMED</div></div>
+    <div class="zt-item"><div class="zt-icon-box" style="background:rgba(231,21,123,.15);border:1px solid rgba(231,21,123,.4);">&#128226;</div><div class="zt-info"><div class="zt-name">SNS Escalation</div><div class="zt-desc">Clinician SMS &middot; PagerDuty</div></div><div class="zt-status s-enforced" id="sns-status">READY</div></div>
+
+    <div style="font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1px;color:var(--text-dim);text-transform:uppercase;margin:8px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border);">&#9674; COMPLIANCE MEDICALE</div>
+    <div class="cbar-row"><div class="cbar-lbl">HIPAA</div><div class="cbar-track"><div class="cbar-fill" id="cb-hipaa" style="width:96%"></div></div><div class="cbar-pct" id="cp-hipaa">96%</div></div>
+    <div class="cbar-row"><div class="cbar-lbl">IEC 62</div><div class="cbar-track"><div class="cbar-fill" id="cb-iec" style="width:92%"></div></div><div class="cbar-pct" id="cp-iec">92%</div></div>
+    <div class="cbar-row"><div class="cbar-lbl">GDPR</div><div class="cbar-track"><div class="cbar-fill" id="cb-gdpr" style="width:98%"></div></div><div class="cbar-pct" id="cp-gdpr">98%</div></div>
+    <div class="cbar-row"><div class="cbar-lbl">ISO27</div><div class="cbar-track"><div class="cbar-fill" id="cb-iso" style="width:89%;background:linear-gradient(90deg,var(--aws-orange),#ffcc44)"></div></div><div class="cbar-pct" id="cp-iso" style="color:var(--aws-orange);">89%</div></div>
+
+    <div style="margin-top:10px;background:#020b14;border:1px solid var(--border);padding:8px;font-family:'Share Tech Mono',monospace;font-size:9px;line-height:1.7;">
+      <div style="color:var(--text-dim);margin-bottom:3px;"># POST /attack — cambia modalità</div>
+      <div><span style="color:var(--aws-teal);">fetch</span>(<span style="color:var(--aws-green-bright);">'http://localhost:5000/attack'</span>,</div>
+      <div style="padding-left:12px;"><span style="color:var(--text-dim);">{</span> method: <span style="color:var(--aws-green-bright);">'POST'</span>,</div>
+      <div style="padding-left:24px;">body: <span style="color:var(--aws-teal);">JSON</span>.stringify({mode: <span style="color:var(--cmd-yellow);">'cmd'</span>}) <span style="color:var(--text-dim);">}</span>)</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════
+const SERVER = 'http://localhost:5000';
+const POLL_MS = 2000;
+
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+let serverOnline = false;
+let lastMode = 'none';
+let anomalyHistory = Array(80).fill(0.05);
+let cmdHistory     = Array(80).fill(0.03);
+let bioHistory     = Array(80).fill(0.02);
+let ecgOffset      = 0;
+let retryTimer     = null;
+let bioNoiseInterval = null;
+
+// ══════════════════════════════════════════════
+// CLOCK
+// ══════════════════════════════════════════════
+function updateClock(){
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    String(n.getHours()).padStart(2,'0') + ':' +
+    String(n.getMinutes()).padStart(2,'0') + ':' +
+    String(n.getSeconds()).padStart(2,'0') + ' CET';
+}
+setInterval(updateClock, 1000); updateClock();
+
+// ══════════════════════════════════════════════
+// ECG CANVAS (locale, animato 25fps)
+// ══════════════════════════════════════════════
+function ecgSample(t){
+  const c=t%1;
+  let v=0.10*Math.exp(-Math.pow((c-.10)/.020,2));
+  v-=0.06*Math.exp(-Math.pow((c-.22)/.010,2));
+  v+=1.00*Math.exp(-Math.pow((c-.25)/.012,2));
+  v-=0.22*Math.exp(-Math.pow((c-.29)/.012,2));
+  v+=0.26*Math.exp(-Math.pow((c-.46)/.050,2));
+  return v;
+}
+function drawECG(){
+  const cv=document.getElementById('ecgCanvas');
+  const ctx=cv.getContext('2d'), w=cv.width, h=cv.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.strokeStyle='rgba(255,45,85,.07)'; ctx.lineWidth=.5;
+  for(let y=0;y<h;y+=12){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  for(let x=0;x<w;x+=12){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
+  ctx.beginPath();
+  for(let x=0;x<w;x++){
+    const t=(x/w)*3+ecgOffset;
+    let noise=(Math.random()-.5)*.02, amp=h*.42;
+    if(lastMode==='cmd'){noise=(Math.random()-.5)*.14;amp*=1.35;}
+    else if(lastMode==='bio'){noise=0;}
+    else if(lastMode==='combo'){noise=(Math.random()-.5)*.18;amp*=1.45;}
+    const y=h/2-(ecgSample(t)+noise)*amp;
+    x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  }
+  const col=lastMode==='cmd'?'rgba(255,215,0,.9)':lastMode==='bio'?'rgba(0,255,255,.85)':lastMode==='combo'?'rgba(255,69,0,.9)':'rgba(255,45,85,.9)';
+  ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.stroke();
+  ecgOffset+=(lastMode==='cmd'?.055:lastMode==='bio'?.014:.025);
+}
+setInterval(drawECG, 40);
+
+// ══════════════════════════════════════════════
+// CHART HELPERS
+// ══════════════════════════════════════════════
+function drawAnomalyChart(){
+  const cv=document.getElementById('anomalyCanvas');
+  const ctx=cv.getContext('2d'), w=cv.width, h=cv.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.strokeStyle='rgba(26,58,92,.4)'; ctx.lineWidth=.5;
+  for(let y=0;y<h;y+=13){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  const ty=h-(.75*h*.88+4);
+  ctx.beginPath();ctx.moveTo(0,ty);ctx.lineTo(w,ty);
+  ctx.strokeStyle='rgba(255,153,0,.6)';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='rgba(255,153,0,.5)';ctx.font='8px Share Tech Mono';ctx.fillText('0.75',2,ty-2);
+  const last=anomalyHistory[anomalyHistory.length-1];
+  const color=last>.90?'#FF4500':last>.75?'#FFD700':'#FF2D55';
+  ctx.beginPath();
+  anomalyHistory.forEach((v,i)=>{const x=(i/79)*w,y=h-(v*h*.88+4);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+  ctx.lineTo(w,h);ctx.lineTo(0,h);ctx.closePath();
+  const gd=ctx.createLinearGradient(0,0,0,h);
+  gd.addColorStop(0,color+'55');gd.addColorStop(1,color+'05');
+  ctx.fillStyle=gd;ctx.fill();
+  ctx.beginPath();
+  anomalyHistory.forEach((v,i)=>{const x=(i/79)*w,y=h-(v*h*.88+4);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+  ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.stroke();
+}
+
+function drawDualChart(){
+  const cv=document.getElementById('scoreCanvas');
+  const ctx=cv.getContext('2d'), w=cv.width, h=cv.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.strokeStyle='rgba(26,58,92,.3)';ctx.lineWidth=.5;
+  for(let y=0;y<h;y+=13){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  ctx.beginPath();
+  cmdHistory.forEach((v,i)=>{const x=(i/79)*w,y=h-(v*h*.9+3);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+  ctx.strokeStyle='rgba(255,215,0,.85)';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.beginPath();
+  bioHistory.forEach((v,i)=>{const x=(i/79)*w,y=h-(v*h*.9+3);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+  ctx.strokeStyle='rgba(0,255,255,.75)';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.fillStyle='rgba(255,215,0,.8)';ctx.font='8px Share Tech Mono';ctx.fillText('CMD',3,10);
+  ctx.fillStyle='rgba(0,255,255,.75)';ctx.fillText('BIO',30,10);
+}
+
+function drawConfBars(normal,cmd,bio){
+  const cv=document.getElementById('confCanvas');
+  const ctx=cv.getContext('2d'), w=cv.width, h=cv.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.strokeStyle='rgba(26,58,92,.4)';ctx.lineWidth=.5;
+  for(let y=0;y<h;y+=13){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  [{l:'NORMAL',v:normal,c:'#59b536'},{l:'CMD INJ',v:cmd,c:'#FFD700'},{l:'BIO TAM',v:bio,c:'#00FFFF'}].forEach((b,i)=>{
+    const bw=w/4, bh=b.v*(h-16), x=i*bw+bw*.2+20, y=h-bh-12;
+    const gd=ctx.createLinearGradient(0,y,0,h-12);
+    gd.addColorStop(0,b.c);gd.addColorStop(1,b.c+'40');
+    ctx.fillStyle=gd;ctx.fillRect(x,y,bw*.6,bh);
+    ctx.strokeStyle=b.c+'80';ctx.lineWidth=1;ctx.strokeRect(x,y,bw*.6,bh);
+    ctx.fillStyle=b.c;ctx.font='8px Share Tech Mono';ctx.textAlign='center';
+    ctx.fillText(b.l,x+bw*.3,h-2);
+    ctx.fillText((b.v*100).toFixed(0)+'%',x+bw*.3,Math.max(y-2,8));
+  });
+  ctx.textAlign='left';
+}
+
+// ══════════════════════════════════════════════
+// FETCH STATS DAL SERVER FLASK
+// ══════════════════════════════════════════════
+async function fetchStats(){
+  const t0 = Date.now();
+  try {
+    const res = await fetch(`${SERVER}/stats`, {signal: AbortSignal.timeout(3000)});
+    const data = await res.json();
+    const pingMs = Date.now() - t0;
+
+    onServerOnline(data, pingMs);
+  } catch(e) {
+    onServerOffline();
+  }
+}
+
+// ══════════════════════════════════════════════
+// SERVER ONLINE → aggiorna tutta la dashboard
+// ══════════════════════════════════════════════
+function onServerOnline(data, pingMs){
+  serverOnline = true;
+  hideOfflineOverlay();
+
+  // Bridge bar
+  document.getElementById('bridgeDot').className='bridge-dot bridge-online';
+  document.getElementById('bridgeStatusText').textContent='Bridge Flask attivo — dati ricevuti';
+  document.getElementById('bridgeStatusText').style.color='var(--aws-green-bright)';
+  document.getElementById('pingMs').textContent=pingMs+'ms';
+  document.getElementById('pingMs').style.color=pingMs<100?'var(--aws-green-bright)':pingMs<300?'var(--aws-orange)':'var(--heart-red)';
+  document.getElementById('tickVal').textContent=data.tick;
+  const now=new Date();
+  document.getElementById('lastUpdate').textContent=
+    String(now.getHours()).padStart(2,'0')+':'+
+    String(now.getMinutes()).padStart(2,'0')+':'+
+    String(now.getSeconds()).padStart(2,'0');
+
+  // Header
+  document.getElementById('serverDot').className='status-dot dot-green';
+  document.getElementById('serverPill').textContent='FLASK ONLINE';
+
+  // Vitals
+  document.getElementById('bpmVal').textContent = data.heart_rate;
+  document.getElementById('hrVal').textContent  = data.heart_rate;
+  document.getElementById('rrVal').textContent  = data.rr_interval;
+  document.getElementById('qrsVal').textContent = data.qrs_ms;
+  document.getElementById('qtVal').textContent  = data.qt_interval;
+  document.getElementById('mqttVal').textContent = data.mqtt_pkt_min+'K';
+  document.getElementById('inferVal').textContent = data.inference_ms+'ms';
+
+  // Scores
+  const anomaly = data.anomaly_score;
+  const cmd = data.cmd_score, bio = data.bio_score, norm = data.normal_score;
+  anomalyHistory.push(anomaly); if(anomalyHistory.length>80) anomalyHistory.shift();
+  cmdHistory.push(cmd);         if(cmdHistory.length>80)     cmdHistory.shift();
+  bioHistory.push(bio);         if(bioHistory.length>80)     bioHistory.shift();
+  drawAnomalyChart(); drawDualChart(); drawConfBars(norm, cmd, bio);
+
+  document.getElementById('scoreDisplayVal').textContent = anomaly.toFixed(3);
+  document.getElementById('scoreDisplayVal').style.color = anomaly>.75?'var(--zero-day)':'var(--aws-purple)';
+  document.getElementById('liveScore').textContent = anomaly.toFixed(3);
+  document.getElementById('cmdScoreVal').textContent = cmd.toFixed(3);
+  document.getElementById('bioScoreVal').textContent = bio.toFixed(3);
+  document.getElementById('normScoreVal').textContent = norm.toFixed(3);
+  document.getElementById('serverTickVal').textContent = data.tick;
+  document.getElementById('latencyVal').textContent = pingMs+'ms';
+  document.getElementById('serverStatusVal').textContent = 'ONLINE';
+  document.getElementById('serverStatusVal').className = 'vita-val active';
+  document.getElementById('threatTypeVal').textContent = data.threat_type;
+
+  // Applica tema attacco
+  const mode = data.attack_mode;
+  if(mode !== lastMode){ applyAttackMode(mode, data); lastMode = mode; }
+
+  // Bottom panel label
+  document.getElementById('threatLabel').textContent = data.threat_type;
+  document.getElementById('modeLabel').textContent = mode.toUpperCase();
+  document.getElementById('modeLabel').style.color = mode==='none'?'var(--aws-green-bright)':mode==='cmd'?'var(--cmd-yellow)':mode==='bio'?'var(--bio-cyan)':'var(--zero-day)';
+}
+
+// ══════════════════════════════════════════════
+// SERVER OFFLINE
+// ══════════════════════════════════════════════
+function onServerOffline(){
+  serverOnline = false;
+  document.getElementById('bridgeDot').className='bridge-dot bridge-offline';
+  document.getElementById('bridgeStatusText').textContent='Bridge Flask non raggiungibile — avvia heartwall_server.py';
+  document.getElementById('bridgeStatusText').style.color='var(--zero-day)';
+  document.getElementById('pingMs').textContent='TIMEOUT';
+  document.getElementById('pingMs').style.color='var(--zero-day)';
+  document.getElementById('serverDot').className='status-dot dot-red';
+  document.getElementById('serverPill').textContent='FLASK OFFLINE';
+  document.getElementById('serverStatusVal').textContent='OFFLINE';
+  document.getElementById('serverStatusVal').className='vita-val red';
+
+  // Mostra overlay con countdown
+  showOfflineOverlay();
+}
+
+function showOfflineOverlay(){
+  const ov=document.getElementById('offlineOverlay');
+  ov.style.display='flex';
+  let cnt=5;
+  document.getElementById('retryCountdown').textContent=cnt;
+  if(retryTimer) clearInterval(retryTimer);
+  retryTimer=setInterval(()=>{
+    cnt--;
+    document.getElementById('retryCountdown').textContent=cnt;
+    if(cnt<=0){ clearInterval(retryTimer); ov.style.display='none'; }
+  },1000);
+}
+function hideOfflineOverlay(){
+  document.getElementById('offlineOverlay').style.display='none';
+  if(retryTimer){ clearInterval(retryTimer); retryTimer=null; }
+}
+
+// ══════════════════════════════════════════════
+// APPLY ATTACK MODE VISUALS
+// ══════════════════════════════════════════════
+function applyAttackMode(mode, data){
+  // Reset panels
+  document.getElementById('leftPanel').className='panel panel-red panel-left';
+  document.getElementById('centerPanel').className='panel panel-teal panel-center';
+  document.getElementById('bottomPanel').className='panel panel-purple panel-bottom';
+  // Reset arrows
+  ['al0','al1','al2','al3'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.className='arrow-line'+(id==='al0'?' red-flow':'');
+    el.style.background='';
+  });
+  ['ap0','ap1','ap2','ap3'].forEach((id,i)=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.textContent=['MQTT','Rule','Route','Invoke'][i];
+    el.style.color=id==='ap0'?'var(--heart-red)':'var(--aws-teal)';
+  });
+  ['fn-pac-sub','fn-iot-sub','fn-lam-sub','fn-sage-sub'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){el.style.color='';el.textContent=['TLS 1.2','Ingress OK','ML Trigger','Active Model'][['fn-pac-sub','fn-iot-sub','fn-lam-sub','fn-sage-sub'].indexOf(id)];}
+  });
+  // Reset ZT
+  document.getElementById('iot-status').textContent='GUARD';document.getElementById('iot-status').className='zt-status s-active';
+  document.getElementById('iot-desc').textContent='Behavioral audit · Cert auth';
+  document.getElementById('lam-status').textContent='ARMED';document.getElementById('lam-status').className='zt-status s-active';
+  document.getElementById('vpc-status').textContent='ISOLATED';document.getElementById('vpc-status').className='zt-status s-active';
+  document.getElementById('vpc-desc').textContent='Private subnet AZ-B · No IGW';
+  document.getElementById('kms-status').textContent='ACTIVE';document.getElementById('kms-status').className='zt-status s-active';
+  document.getElementById('sns-status').textContent='READY';document.getElementById('sns-status').className='zt-status s-enforced';
+  document.getElementById('defenderStatus').textContent='WATCH';document.getElementById('defenderStatus').className='s-active';
+  document.getElementById('defenderSub').textContent='Behavioral audit';document.getElementById('defenderSub').style.color='';
+  document.getElementById('cwStatus').textContent='LIVE';document.getElementById('cwStatus').className='s-active';
+  document.getElementById('snsStatus').textContent='ARMED';document.getElementById('snsStatus').className='s-enforced';
+  document.getElementById('clinicianBox').style.borderColor='rgba(255,45,85,.3)';
+  document.getElementById('clinicianSub').textContent='Standby';document.getElementById('clinicianSub').style.color='';
+  // Reset compliance
+  [['cb-hipaa','cp-hipaa','96%'],['cb-iec','cp-iec','92%'],['cb-gdpr','cp-gdpr','98%']].forEach(([cb,cp,v])=>{
+    document.getElementById(cb).style.width=v;document.getElementById(cb).style.background='';
+    document.getElementById(cp).textContent=v;document.getElementById(cp).style.color='var(--aws-green-bright)';
+  });
+  // Reset ZD
+  document.getElementById('zdType').textContent='MONITORING';
+  document.getElementById('zdVector').textContent='---';document.getElementById('zdPayload').textContent='---';
+  document.getElementById('zdSeverity').textContent='NONE';document.getElementById('zdSeverity').style.color='var(--aws-green-bright)';
+  document.getElementById('zdMitre').textContent='---';document.getElementById('zdResponse').textContent='STANDBY';document.getElementById('zdResponse').style.color='var(--aws-green-bright)';
+  // Stop bio overlay
+  document.getElementById('bioOverlay').style.display='none';
+  if(bioNoiseInterval){clearInterval(bioNoiseInterval);bioNoiseInterval=null;}
+
+  if(mode==='none'){
+    document.getElementById('attackStatus').className='safe';
+    document.getElementById('attackStatusText').textContent='&#9679; RITMO SINUSALE NORMALE — Sistema sicuro';
+    addAlert('LOW','Sistema in stato normale','Flask server: mode=none');
+    addLog('safe');
+    return;
+  }
+
+  if(mode==='cmd'||mode==='combo'){
+    document.getElementById('leftPanel').className='panel panel-red panel-left panel-cmd-active';
+    document.getElementById('centerPanel').className='panel panel-teal panel-center panel-cmd-active';
+    document.getElementById('attackStatus').className=(mode==='combo'?'combo':'cmd');
+    document.getElementById('attackStatusText').textContent=mode==='combo'?'&#9762; COMBO ZERO-DAY — CMD+BIO Simultanei':'&#9889; COMMAND INJECTION — Payload MQTT compromesso';
+    ['al0','al1','al2','al3'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.add('attack-flow');});
+    ['ap0','ap1','ap2','ap3'].forEach(id=>{const el=document.getElementById(id);if(el){el.textContent='INJECT';el.style.color='var(--cmd-yellow)';}});
+    document.getElementById('fn-pac-sub').textContent='&#9889; COMPROMISED';document.getElementById('fn-pac-sub').style.color='var(--cmd-yellow)';
+    document.getElementById('fn-iot-sub').textContent='MALFORMED PAYLOAD';document.getElementById('fn-iot-sub').style.color='var(--cmd-yellow)';
+    document.getElementById('fn-lam-sub').textContent='BLOCKING';document.getElementById('fn-lam-sub').style.color='var(--zero-day)';
+    document.getElementById('iot-status').textContent='BREACH!';document.getElementById('iot-status').className='zt-status s-breach';
+    document.getElementById('iot-desc').textContent='CMD PAYLOAD RILEVATO!';
+    document.getElementById('lam-status').textContent='BLOCKING';document.getElementById('lam-status').className='zt-status s-alert';
+    document.getElementById('sns-status').textContent='FIRING!';document.getElementById('sns-status').className='zt-status s-alert';
+    document.getElementById('defenderStatus').textContent='ALERT!';document.getElementById('defenderStatus').className='s-breach';
+    document.getElementById('defenderSub').textContent='CMD INJECT DETECTED';document.getElementById('defenderSub').style.color='var(--cmd-yellow)';
+    document.getElementById('snsStatus').textContent='FIRING!';document.getElementById('snsStatus').className='s-alert';
+    document.getElementById('clinicianBox').style.borderColor='var(--cmd-yellow)';
+    document.getElementById('clinicianSub').textContent='ALERT IN ARRIVO';document.getElementById('clinicianSub').style.color='var(--cmd-yellow)';
+    document.getElementById('cb-hipaa').style.width='61%';document.getElementById('cp-hipaa').textContent='61%';document.getElementById('cp-hipaa').style.color='var(--cmd-yellow)';
+    document.getElementById('cb-iec').style.width='55%';document.getElementById('cp-iec').textContent='55%';document.getElementById('cp-iec').style.color='var(--cmd-yellow)';
+    document.getElementById('zdType').textContent='COMMAND INJECTION';
+    document.getElementById('zdVector').textContent='MQTT Topic Override';
+    document.getElementById('zdPayload').textContent='; sudo pace_override --rate=300';
+    document.getElementById('zdSeverity').textContent='CRITICAL';document.getElementById('zdSeverity').style.color='var(--cmd-yellow)';
+    document.getElementById('zdMitre').textContent='T1059 · T1190';
+    document.getElementById('zdResponse').textContent='LAMBDA BLOCKING';document.getElementById('zdResponse').style.color='var(--cmd-yellow)';
+    addAlert('CRIT','CMD INJECTION rilevato da Flask server','MQTT payload; sudo pace_override --rate=300');
+    addLog('cmd');
+  }
+  if(mode==='bio'||mode==='combo'){
+    document.getElementById('leftPanel').className='panel panel-red panel-left panel-bio-active';
+    document.getElementById('bottomPanel').className='panel panel-purple panel-bottom panel-bio-active';
+    if(mode==='bio'){
+      document.getElementById('attackStatus').className='bio';
+      document.getElementById('attackStatusText').textContent='&#128308; BIOSIGNAL TAMPERING — ECG replay sintetico rilevato';
+    }
+    ['al0','al1'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.add('bio-flow');});
+    document.getElementById('fn-pac-sub').textContent='SIGNAL HIJACKED';document.getElementById('fn-pac-sub').style.color='var(--bio-cyan)';
+    document.getElementById('fn-sage-sub').textContent='VARIANCE=0 FLAG';document.getElementById('fn-sage-sub').style.color='var(--bio-cyan)';
+    document.getElementById('vpc-status').textContent='SUSPECT';document.getElementById('vpc-status').className='zt-status s-alert';
+    document.getElementById('vpc-desc').textContent='MITM TLS attempt detected';
+    document.getElementById('kms-status').textContent='RE-AUTH';document.getElementById('kms-status').className='zt-status s-enforced';
+    document.getElementById('cwStatus').textContent='ALARM!';document.getElementById('cwStatus').className='s-alert';
+    document.getElementById('clinicianBox').style.borderColor='var(--bio-cyan)';
+    document.getElementById('clinicianSub').textContent='ECG SIGNAL FAKE';document.getElementById('clinicianSub').style.color='var(--bio-cyan)';
+    document.getElementById('cb-gdpr').style.width='72%';document.getElementById('cp-gdpr').textContent='72%';document.getElementById('cp-gdpr').style.color='var(--bio-cyan)';
+    if(mode==='bio'){
+      document.getElementById('zdType').textContent='BIOSIGNAL TAMPERING';
+      document.getElementById('zdVector').textContent='TLS MITM + Signal Replay';
+      document.getElementById('zdPayload').textContent='Pre-recorded ECG replay';
+      document.getElementById('zdSeverity').textContent='CRITICAL';document.getElementById('zdSeverity').style.color='var(--bio-cyan)';
+      document.getElementById('zdMitre').textContent='T1557 · T1565.001';
+      document.getElementById('zdResponse').textContent='SAGEMAKER FLAGGING';document.getElementById('zdResponse').style.color='var(--bio-cyan)';
+      addAlert('CRIT','BIOSIGNAL TAMPERING da Flask server','ECG variance=0 — segnale biologicamente impossibile');
+      addLog('bio');
+    }
+    // Bio noise overlay
+    document.getElementById('bioOverlay').style.display='block';
+    startBioNoise();
+  }
+  if(mode==='combo'){
+    document.getElementById('leftPanel').className='panel panel-red panel-left panel-combo-active';
+    document.getElementById('zdType').textContent='ZERO-DAY COMBO';
+    document.getElementById('zdSeverity').textContent='CRITICAL / P0';document.getElementById('zdSeverity').style.color='var(--zero-day)';
+    document.getElementById('zdMitre').textContent='T1059 + T1557 + T1565';
+    document.getElementById('zdPayload').textContent='Multi-vector: CMD+REPLAY';
+    addAlert('CRIT','ZERO-DAY COMBO P0 — Flask server','CMD Injection + Biosignal Tampering simultanei');
+    addLog('combo');
+  }
+}
+
+// ══════════════════════════════════════════════
+// SEND ATTACK COMMAND → POST /attack
+// ══════════════════════════════════════════════
+async function sendAttack(mode){
+  try{
+    await fetch(`${SERVER}/attack`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({mode}),
+      signal:AbortSignal.timeout(3000)
+    });
+    console.log(`[HeartWall] Attack mode inviato: ${mode}`);
+  } catch(e){
+    console.warn('[HeartWall] Server offline — impossibile inviare comando');
+    onServerOffline();
+  }
+}
+
+// ══════════════════════════════════════════════
+// BIO NOISE OVERLAY
+// ══════════════════════════════════════════════
+function startBioNoise(){
+  if(bioNoiseInterval) clearInterval(bioNoiseInterval);
+  const cv=document.getElementById('bioCanvas');
+  const ctx=cv.getContext('2d');
+  let ph=0;
+  bioNoiseInterval=setInterval(()=>{
+    cv.width=window.innerWidth;cv.height=window.innerHeight;
+    ctx.clearRect(0,0,cv.width,cv.height);
+    ctx.strokeStyle='rgba(0,255,255,.035)';ctx.lineWidth=1;
+    for(let y=0;y<cv.height;y+=40){
+      ctx.beginPath();
+      for(let x=0;x<cv.width;x+=4){
+        const ny=y+Math.sin(x*.02+ph)*8;
+        x===0?ctx.moveTo(x,ny):ctx.lineTo(x,ny);
+      }
+      ctx.stroke();
+    }
+    ph+=.03;
+  },50);
+}
+
+// ══════════════════════════════════════════════
+// LOG & ALERTS
+// ══════════════════════════════════════════════
+function addLog(type){
+  const log=document.getElementById('attackLog');
+  const now=new Date();
+  const t=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+  const map={safe:['log-safe','&#10004; NORMALE  — Flask data OK'],cmd:['log-cmd','&#9889; CMD INJECTION  — Server confermato'],bio:['log-bio','&#128308; BIO TAMPER  — Server confermato'],combo:['log-combo','&#9762; COMBO P0  — Multi-vector ATTIVO']};
+  const [cls,txt]=map[type]||['log-safe','--- evento'];
+  const el=document.createElement('div');
+  el.className='log-entry '+cls;
+  el.innerHTML='<span class="log-time">'+t+'</span><span>'+txt+'</span>';
+  log.insertBefore(el,log.firstChild);
+  while(log.children.length>25)log.removeChild(log.lastChild);
+}
+function addAlert(sev,text,sub){
+  const q=document.getElementById('alertQueue');
+  const cls={CRIT:'sev-crit',HIGH:'sev-high',MED:'sev-med',LOW:'sev-low'}[sev]||'sev-low';
+  const now=new Date();
+  const t=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+  const el=document.createElement('div');
+  el.className='alert-item';
+  el.innerHTML=`<div class="alert-sev ${cls}">${sev}</div><div><div class="alert-text">${text}</div><div class="alert-time">${t} &middot; ${sub}</div></div>`;
+  q.insertBefore(el,q.firstChild);
+  while(q.children.length>5)q.removeChild(q.lastChild);
+}
+
+// ══════════════════════════════════════════════
+// BOOTSTRAP — avvia polling ogni 2s
+// ══════════════════════════════════════════════
+fetchStats(); // primo fetch immediato
+setInterval(fetchStats, POLL_MS);
+</script>
+</body>
+</html>
