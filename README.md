@@ -115,3 +115,4 @@ Per testare il progetto senza costi AWS reali, abbiamo utilizzato **LocalStack**
    ```bash
    heartwall_bridge.html
    ```
+@ AWS HeartWall IoT Cybersecurity 2026
