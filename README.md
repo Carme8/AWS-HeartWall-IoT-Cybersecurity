@@ -115,4 +115,12 @@ Per testare il progetto senza costi AWS reali, abbiamo utilizzato **LocalStack**
    ```bash
    heartwall_bridge.html
    ```
+---
+
+## ⚠️ Disclaimer & Educational Purpose
+Questo progetto è stato sviluppato esclusivamente a **Scopo Educativo e di Ricerca**. 
+* **Etica**: Non è destinato all'uso su dispositivi medici reali. 
+* **Sicurezza**: Il codice serve a dimostrare vulnerabilità teoriche e architetture di difesa in ambienti simulati e controllati (LocalStack/Docker). 
+* **Responsabilità**: L'autore non si assume alcuna responsabilità per l'uso improprio delle informazioni o del codice contenuti in questo repository.
+ 
 @ AWS HeartWall IoT Cybersecurity 2026
